@@ -3,7 +3,7 @@ from typing import Dict, Tuple, Optional
 from ..utils.logger import Logger
 
 try:
-    from pyncm.apis.login import LoginViaCellphone
+    from pyncm.apis.login import LoginRefreshToken, LoginViaCellphone, LoginViaCookie
     from pyncm import GetCurrentSession, DumpSessionAsString
     PYNCM_AVAILABLE = True
 except ImportError:
@@ -21,6 +21,34 @@ class AuthService:
     def _hash_password(self, password: str) -> str:
         """将明文密码转换为 MD5 哈希"""
         return hashlib.md5(password.encode()).hexdigest()
+
+    def refresh_cookie(self, music_u: str, csrf: str) -> Tuple[bool, Optional[Dict[str, str]]]:
+        """使用现有登录态续期 Cookie，避免从新设备重复执行密码登录。"""
+        try:
+            LoginViaCookie(MUSIC_U=music_u, **{"__csrf": csrf})
+            result = LoginRefreshToken()
+
+            if result.get("code") != 200:
+                error_msg = result.get("message", "未知错误")
+                self.logger.warning(f"现有Cookie续期失败: {error_msg}")
+                return False, None
+
+            session = GetCurrentSession()
+            refreshed_music_u = session.cookies.get("MUSIC_U")
+            refreshed_csrf = session.cookies.get("__csrf")
+
+            if not refreshed_music_u or not refreshed_csrf:
+                self.logger.warning("Cookie续期响应缺少必要字段")
+                return False, None
+
+            self.logger.info("现有Cookie续期成功")
+            return True, {
+                "Cookie_MUSIC_U": refreshed_music_u,
+                "Cookie___csrf": refreshed_csrf
+            }
+        except Exception as e:
+            self.logger.warning(f"现有Cookie续期发生异常: {str(e)}")
+            return False, None
         
     def login(self, phone: str, password: str = None, md5_password: str = None) -> Tuple[bool, Optional[Dict[str, str]]]:
         """

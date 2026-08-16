@@ -23,6 +23,19 @@ class CookieRefreshTask:
             phone = os.environ.get("NETEASE_PHONE")
             password = os.environ.get("NETEASE_PASSWORD")
             md5_password = os.environ.get("NETEASE_MD5_PASSWORD")
+            music_u = os.environ.get("MUSIC_U")
+            csrf = os.environ.get("CSRF")
+
+            success = False
+            cookies = None
+            if music_u and csrf:
+                self.logger.info("优先使用现有Cookie续期")
+                success, cookies = self.auth_service.refresh_cookie(music_u, csrf)
+
+            if success and cookies:
+                return self._update_cookies(cookies)
+
+            self.logger.warning("现有Cookie续期失败，回退到密码登录")
             
             if not phone:
                 self.logger.error("未设置手机号，无法执行自动登录")
@@ -58,40 +71,38 @@ class CookieRefreshTask:
                     )
                 return False
                 
-            # 更新GitHub Secrets
-            # 这里需要转换Cookie键名，使其与GitHub Actions中使用的名称匹配
-            secrets_to_update = {
-                "MUSIC_U": cookies.get("Cookie_MUSIC_U", ""),
-                "CSRF": cookies.get("Cookie___csrf", "")
-            }
-            
-            update_success = self.github_service.update_cookies(secrets_to_update)
-            
-            if update_success:
-                self.logger.info("成功更新GitHub Secrets中的Cookie")
-                if self.notifier:
-                    self.notifier.send_notification(
-                        "网易云音乐合伙人 - Cookie更新成功",
-                        "已成功获取新的Cookie并更新到GitHub Secrets"
-                    )
-                return True
-            else:
-                self.logger.error("更新GitHub Secrets失败")
-                if self.notifier:
-                    self.notifier.send_notification(
-                        "网易云音乐合伙人 - Cookie更新失败",
-                        "登录成功但更新GitHub Secrets时失败"
-                    )
-                return False
-                
+            return self._update_cookies(cookies)
         except Exception as e:
             error_message = f"Cookie刷新任务执行异常: {str(e)}"
             self.logger.error(error_message)
-            
             if self.notifier:
                 self.notifier.send_notification(
                     "网易云音乐合伙人 - Cookie刷新异常",
                     error_message
                 )
-                
             return False
+
+    def _update_cookies(self, cookies: Dict[str, str]) -> bool:
+        secrets_to_update = {
+            "MUSIC_U": cookies.get("Cookie_MUSIC_U", ""),
+            "CSRF": cookies.get("Cookie___csrf", "")
+        }
+
+        update_success = self.github_service.update_cookies(secrets_to_update)
+            
+        if update_success:
+            self.logger.info("成功更新GitHub Secrets中的Cookie")
+            if self.notifier:
+                self.notifier.send_notification(
+                    "网易云音乐合伙人 - Cookie更新成功",
+                    "已成功获取新的Cookie并更新到GitHub Secrets"
+                )
+            return True
+
+        self.logger.error("更新GitHub Secrets失败")
+        if self.notifier:
+            self.notifier.send_notification(
+                "网易云音乐合伙人 - Cookie更新失败",
+                "登录成功但更新GitHub Secrets时失败"
+            )
+        return False
