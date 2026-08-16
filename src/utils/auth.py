@@ -22,6 +22,14 @@ class AuthService:
         """将明文密码转换为 MD5 哈希"""
         return hashlib.md5(password.encode()).hexdigest()
 
+    def _get_latest_cookie(self, name: str) -> Optional[str]:
+        values = [
+            cookie.value
+            for cookie in GetCurrentSession().cookies
+            if cookie.name == name and cookie.value
+        ]
+        return values[-1] if values else None
+
     def refresh_cookie(self, music_u: str, csrf: str) -> Tuple[bool, Optional[Dict[str, str]]]:
         """使用现有登录态续期 Cookie，避免从新设备重复执行密码登录。"""
         try:
@@ -33,9 +41,8 @@ class AuthService:
                 self.logger.warning(f"现有Cookie续期失败: {error_msg}")
                 return False, None
 
-            session = GetCurrentSession()
-            refreshed_music_u = session.cookies.get("MUSIC_U")
-            refreshed_csrf = session.cookies.get("__csrf")
+            refreshed_music_u = self._get_latest_cookie("MUSIC_U")
+            refreshed_csrf = self._get_latest_cookie("__csrf")
 
             if not refreshed_music_u or not refreshed_csrf:
                 self.logger.warning("Cookie续期响应缺少必要字段")
