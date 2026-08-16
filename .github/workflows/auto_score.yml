@@ -1,5 +1,7 @@
 name: Auto Score
 
+# Registered in the K1XE fork for scheduled and manual runs.
+
 on:
   schedule:
     - cron: '0 17 * * *'  # UTC 17:00 (北京时间1:00)
